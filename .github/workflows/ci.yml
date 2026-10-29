@@ -1,0 +1,40 @@
+name: Repository checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  repository-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure local environment file is not tracked
+        shell: bash
+        run: |
+          if git ls-files --error-unmatch .env >/dev/null 2>&1; then
+            echo "::error::.env must never be tracked."
+            exit 1
+          fi
+
+      - name: Ensure example environment file exists
+        run: test -f .env.example
+
+      - name: Check required project documentation
+        shell: bash
+        run: |
+          test -f README.md
+          test -f docs/architecture.md
+          test -f docs/plan-de-travail.md
+          test -f SECURITY.md
+
+# À l'étape 2, ajouter la validation de compose.yaml.
+# À l'étape CI suivante, envisager les tests, le scan d'images et/ou la publication.
+# Aucun déploiement automatique n'est configuré à ce stade.

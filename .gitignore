@@ -1,0 +1,33 @@
+# Secrets et configuration locale
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+certs/
+acme.json
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Éditeurs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs et temporaires
+*.log
+tmp/
+.temp/
+.cache/
+
+# Tests / build
+coverage/
+dist/
+build/
+node_modules/
