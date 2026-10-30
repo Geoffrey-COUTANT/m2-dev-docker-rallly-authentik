@@ -1,104 +1,82 @@
 # Projet M2 — Dev avec Docker
 
-> Année 2026–2027 · M2 DEVFULLSTACK · Groupe de 2  
-> Sujet de référence : « Sujet de projet — Dev avec Docker »
+Stack locale macOS : Traefik, Rallly (image officielle 4.16.3 pour l’initialisation ou image du fork pour les features), Authentik 2026.8.5, deux PostgreSQL 16, Garage et Mailpit. Le dépôt de l'étape 1 est conservé et complété. Voir [rapport des vérifications](docs/validation.md) pour distinguer les tests réalisés des actions restantes.
 
-## Objectif
+## Version du fork avec les deux features
 
-Construire un environnement reproductible, d'abord en local puis sur une VM Énov, autour de :
-
-- Docker Compose ;
-- un reverse proxy (choix provisoire : Traefik) ;
-- Authentik configuré comme fournisseur d'identité OIDC ;
-- Rallly self-hosted ;
-- une pipeline CI/CD ;
-- deux fonctionnalités du catalogue attribuées par le formateur et une fonctionnalité libre.
-
-**Priorité : stabiliser l'infrastructure avant de développer les fonctionnalités Rallly.** Les choix de versions et les variables exactes seront validés avant la création du Compose définitif.
-
-## État du dépôt
-
-Ce dépôt est le **squelette de départ**. Il ne contient pas encore la stack complète et ne doit pas être présenté comme déployé ou opérationnel.
-
-- [ ] Confirmer avec le formateur les deux fonctionnalités attribuées.
-- [ ] Vérifier les versions et documentations officielles de Rallly et Authentik.
-- [ ] Construire et tester la stack locale.
-- [ ] Démontrer le SSO OIDC, les policies par groupe et l'invitation externe.
-- [ ] Ajouter les fonctionnalités retenues.
-- [ ] Valider la CI sur la branche principale.
-- [ ] Déployer sur la VM Énov et documenter les écarts.
-- [ ] Préparer la soutenance.
-
-## Prérequis
-
-- macOS ;
-- Docker Desktop installé et démarré ;
-- Git ;
-- un compte GitHub ;
-- accès à la documentation et, plus tard, à la VM Énov.
-
-Vérifier les outils :
+La stack principale peut maintenant utiliser le fork du groupe au commit
+`413ff340d` : quota par créneau et blocage des votes passés.
+Une fois Authentik/OIDC configuré, utiliser systématiquement :
 
 ```bash
-docker --version
-docker compose version
-git --version
-docker info
+./scripts/fetch-custom-image.sh 41049272721
+./scripts/compose-custom.sh up -d --wait --wait-timeout 300
+./scripts/compose-custom.sh ps
 ```
 
-`docker info` doit répondre sans erreur. Si Docker Desktop est fermé, lance-le avant de continuer.
+Rallly reste accessible sur http://rallly.localhost:8080 avec Authentik.
+Le [guide d’intégration](docs/integration-fork.md) détaille la construction distante,
+la sauvegarde, les migrations, la recette et le retour à l’image officielle.
+Les commandes sans surcharge ci-dessous servent à l’initialisation de la stack
+avec l’image officielle, avant de configurer OIDC.
 
-## Arborescence
+## Démarrer sur Mac
+
+Docker Desktop doit être démarré. Allouer environ 6 Go de RAM à Docker est conseillé pour cette stack de laboratoire. Docker Compose v2 récent (ou v5) est requis.
+
+Depuis le dossier du projet :
+
+```bash
+./scripts/generate-secrets.sh
+./scripts/validate.sh
+docker compose pull
+docker compose up -d --wait --wait-timeout 300
+./scripts/smoke-test.sh
+```
+
+Le générateur refuse d'écraser un `.env` existant. Si tu avais créé un `.env` avec le squelette de l'étape 1, conserve une copie privée et adapte ses variables au nouveau `.env.example`. Ne change pas les mots de passe d'une base déjà initialisée sans migration.
+
+Ajouter cette ligne dans `/etc/hosts` avec `sudo nano /etc/hosts` si les noms ne sont pas résolus automatiquement sur ton Mac :
 
 ```text
-.
-├── .env.example
-├── .gitignore
-├── README.md
-├── SECURITY.md
-├── docker/
-│   ├── authentik/
-│   ├── rallly/
-│   └── traefik/
-├── docs/
-│   ├── architecture.md
-│   ├── decisions.md
-│   ├── plan-de-travail.md
-│   ├── runbook-local.md
-│   ├── runbook-enov.md
-│   ├── authentik-oidc.md
-│   ├── features.md
-│   └── soutenance.md
-├── scripts/
-└── .github/
-    └── workflows/
-        └── ci.yml
+127.0.0.1 rallly.localhost authentik.localhost mailpit.localhost
 ```
 
-## Secrets et configuration
+- Rallly : http://rallly.localhost:8080
+- Authentik : http://authentik.localhost:8080
+- Première configuration Authentik : http://authentik.localhost:8080/if/flow/initial-setup/
+- Courriels de test : http://mailpit.localhost:8080
 
-1. Copier `.env.example` vers `.env` uniquement lorsque les variables nécessaires à la stack auront été confirmées.
-2. Remplacer tous les exemples par des valeurs locales fortes.
-3. Ne jamais committer `.env`, mots de passe, jetons, clés privées ou fichiers de certificats.
-4. Pour la VM, utiliser une configuration distincte et sécurisée ; ne pas recopier les secrets de production dans GitHub.
-5. Les secrets du workflow GitHub devront être ajoutés dans les paramètres du dépôt uniquement si un déploiement automatisé est retenu.
+Seul le proxy publie un port, lié à la boucle locale. Aucun SMTP de test n'est envoyé sur Internet. Les courriels reçus par Mailpit sont visibles par toute personne ayant accès au Mac.
 
-Le fichier `.env.example` est un inventaire initial de paramètres envisagés, pas encore une configuration exécutable. Il sera ajusté à la version précise des images retenues.
+## Ce que livre l'étape 2
 
-## Développement en équipe
+- Compose exécutable, proxy à configuration statique sans socket Docker ;
+- bases séparées, volumes persistants, réseaux de données internes ;
+- stockage S3 Garage initialisé par son mode single-node ;
+- SMTP de laboratoire Mailpit et génération de secrets ;
+- guide de démarrage, recette, dépannage et configuration OIDC ;
+- validation Compose et build applicatif dans GitHub Actions.
 
-- Créer des branches courtes par tâche : `docs/...`, `infra/...`, `feature/...`.
-- Ouvrir une Pull Request pour les changements importants.
-- Faire relire les changements de l'autre membre.
-- Ne jamais partager les secrets dans les issues, commits ou captures d'écran.
-- Garder des commits réguliers et explicites.
+Le démarrage de base n'active pas OIDC : cela permet d'initialiser Authentik avant de créer son fournisseur. Pour le SSO, suivre [le guide OIDC](docs/authentik-oidc.md), puis ajouter `-f compose.yaml -f compose.oidc.yaml` à toutes les commandes Compose. L'activation OIDC seule ne supprime pas les autres moyens de connexion ni le vote invité.
 
-## Démarrage
+## Commandes utiles
 
-À cette première étape, on prépare le dépôt et sa documentation. **Il n'y a pas encore de `compose.yaml` fonctionnel** : il sera ajouté à l'étape 2, après vérification des images et de leurs configurations officielles.
+```bash
+docker compose ps
+docker compose logs --tail=100 rallly authentik-server authentik-worker
+docker compose stop
+docker compose start
+docker compose down
+```
 
-Voir :
-- [Architecture](docs/architecture.md)
-- [Plan de travail](docs/plan-de-travail.md)
-- [Décisions techniques](docs/decisions.md)
-- [Sécurité](SECURITY.md)
+`down` conserve les volumes. `down -v` supprime définitivement les données : ne pas l'utiliser pour un simple redémarrage. Pour mettre à jour, sauvegarder d'abord les bases et volumes et lire les notes de version.
+
+## Suite du projet
+
+1. Refaire la recette SSO/groupes dans la stack intégrée et terminer l’invitation externe.
+2. Développer la feature libre et capturer la démo des trois fonctionnalités.
+3. Publier les changements d’infrastructure, obtenir la CI verte et compléter scan/publication de l’image.
+4. Déployer sur VM Énov avec DNS public/VPN, TLS et secrets distincts.
+
+Les deux features catalogue sont fusionnées et la CI du fork est verte. L’intégration Docker est décrite plus haut ; la feature libre, l’invitation externe, la VM et les preuves finales restent à compléter. Répartition en duo dans [plan-de-travail](docs/plan-de-travail.md).

@@ -1,37 +1,42 @@
-# Fonctionnalités Rallly
+# Fonctionnalités Rallly — suivi au 30 octobre 2026
 
-Le sujet demande deux fonctionnalités du catalogue attribuées par le formateur et une fonctionnalité libre. Les propositions ci-dessous ne sont pas encore validées.
+Les deux fonctionnalités catalogue sont développées dans le fork
+https://github.com/Geoffrey-COUTANT/rallly et fusionnées dans main.
+La confirmation de leur attribution par le formateur reste à consigner.
 
-## Fonctionnalités du catalogue — à confirmer
+| Fonctionnalité | État | Preuve |
+|---|---|---|
+| Catalogue n°3 : plafond de participants par créneau | Développée, testée, fusionnée | https://github.com/Geoffrey-COUTANT/rallly/pull/1 |
+| Catalogue n°5 : bloquer le vote sur dates/heures passées | Développée, testée, fusionnée | https://github.com/Geoffrey-COUTANT/rallly/pull/2 |
+| Fonctionnalité libre | À définir et développer | Aucune implémentation revendiquée |
 
-Propositions de départ :
-1. Bloquer le vote sur les dates/heures passées (catalogue, complexité indicative facile).
-2. Analyse des résultats (catalogue, complexité indicative moyenne).
+## Quota par créneau
 
-**Action obligatoire :** confirmer les deux attributions avec le formateur avant de s'engager dans leur implémentation.
+Un responsable authentifié définit une limite commune, appliquée indépendamment
+à chaque option. Seuls les Oui occupent une place. Dépasser la capacité provoque
+un refus explicite et atomique, même pour des requêtes concurrentes.
+Documentation applicative : `docs/option-capacity.md` dans le fork.
 
-Pour chaque fonctionnalité retenue, documenter :
-- problème résolu et périmètre ;
-- comportement attendu ;
-- tests automatisés/manuels ;
-- captures avant/après ;
-- scénario de démonstration ;
-- éventuelles limites.
+## Créneaux passés
 
-## Fonctionnalité libre proposée : tableau de bord personnel
+Un créneau avec horaire est verrouillé à son début ; une date entière reste
+ouverte jusqu’à la fin du jour dans le fuseau du sondage (UTC par défaut).
+Les choix sont désactivés dans l’interface et vérifiés côté serveur. Les votes
+historiques sont conservés lorsqu’une réponse future est modifiée.
+Documentation applicative : `docs/past-option-votes.md` dans le fork.
 
-Afficher à l'utilisateur connecté une synthèse de ses sondages créés, des sondages auxquels il participe et des échéances pertinentes.
+## Validation et démonstration
 
-Avant de commencer :
-- vérifier les fonctions existantes dans la version/fork Rallly ;
-- préciser les règles d'accès et de confidentialité ;
-- limiter le périmètre à un scénario démontrable ;
-- ajouter des tests.
+La suite locale a validé 1 139 tests unitaires et 19 tests PostgreSQL (9 pour les
+créneaux passés et 10 pour les quotas), avec TypeScript, Biome et build production.
+La CI de main après fusion des deux PR est verte :
+https://github.com/Geoffrey-COUTANT/rallly/actions/runs/41039321875
 
-## Suivi
+L’image `m2-rallly:413ff340d` se construit depuis le commit de main figé contenant
+les deux features. Voir [l’intégration dans la stack](integration-fork.md).
+Le transfert des sondages de la démo 3025 vers la stack 8080 n’est pas effectué.
 
-| Fonctionnalité | Validée par le formateur ? | Implémentée ? | Tests | Démo |
-|---|---|---|---|---|
-| Catalogue 1 | À confirmer | Non | À faire | À faire |
-| Catalogue 2 | À confirmer | Non | À faire | À faire |
-| Libre : tableau de bord | À confirmer par le groupe | Non | À faire | À faire |
+À compléter pour la soutenance : captures des deux features dans la stack
+intégrée, scénario live, feature libre et validation d’attribution du formateur.
+Les PR sont fusionnées sur notre fork : cela ne constitue pas une acceptation
+upstream et ne donne pas automatiquement le bonus du sujet.
