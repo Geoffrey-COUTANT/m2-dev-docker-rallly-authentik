@@ -1,0 +1,11 @@
+# Same application source and Dockerfile as the remote project-image workflow.
+services:
+  rallly:
+    image: m2-rallly:413ff340d
+    pull_policy: never
+    build:
+      context: https://github.com/Geoffrey-COUTANT/rallly.git#413ff340dd2dab415e1779776262ce9a402a71ec
+      dockerfile: apps/web/Dockerfile
+      args:
+        SELF_HOSTED: 'true'
+        APP_VERSION: 413ff340dd2dab415e1779776262ce9a402a71ec

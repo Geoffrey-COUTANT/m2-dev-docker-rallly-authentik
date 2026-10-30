@@ -1,50 +1,25 @@
-# Architecture cible
+# Architecture locale
 
-## Vue logique
-
-```text
-Navigateur
-   |
-   v
-Traefik (point d'entrée HTTP/HTTPS)
-   |------------------------|
-   v                        v
-Authentik                  Rallly
-   |                        |
-   v                        v
-PostgreSQL Authentik       Base de données Rallly
-   |
-Redis (si requis par la version Authentik retenue)
-
-SMTP de laboratoire : utilisé pour tester les invitations, si nécessaire.
+```mermaid
+flowchart LR
+  Mac[Navigateur Mac :8080] --> Proxy[Traefik non-root]
+  Proxy --> R[Rallly]
+  Proxy --> A[Authentik server]
+  Proxy --> M[Mailpit]
+  R --> RP[(PostgreSQL Rallly)]
+  R --> G[Garage S3]
+  R --> M
+  A --> AP[(PostgreSQL Authentik)]
+  W[Authentik worker] --> AP
+  W --> M
 ```
 
-Ce schéma est conceptuel. Les services, dépendances et exigences exactes seront ajustés selon les versions officielles retenues.
+`frontend` relie le proxy, les services HTTP et le SMTP. `rallly-data` relie Rallly, sa base et Garage. `authentik-data` relie les processus Authentik et leur base. Les deux réseaux de données sont `internal: true`. Aucun port de base, S3 ou SMTP n'est publié.
 
-## Principes
+Traefik porte les alias Docker `rallly.localhost`, `authentik.localhost`, `mailpit.localhost`. Le navigateur résout ces noms vers 127.0.0.1 ; les conteneurs les résolvent vers Traefik. L'URL de découverte OIDC est donc identique dans le navigateur et Rallly, sans confusion entre localhost et le réseau des conteneurs.
 
-- Un point d'entrée web via le reverse proxy.
-- Les bases de données restent sur des réseaux Docker internes et ne sont pas publiées directement.
-- Des volumes nommés assurent la persistance.
-- Les secrets sont injectés depuis l'environnement et ne sont pas intégrés aux images.
-- Le déploiement local et la VM utilisent autant que possible le même Compose et les mêmes images ; les écarts sont documentés.
-- Authentik est l'IdP OIDC de Rallly : cette intégration doit être réelle et démontrée, pas simulée.
-- Deux groupes au minimum doivent avoir des droits distincts ; le processus d'invitation externe doit être documenté et démontré.
+Traefik écoute sur 8080 en non-root, sans accès au socket Docker, sans dashboard. Le routage conserve Host et les en-têtes transmis par le proxy ; Authentik utilise son support natif du proxy et des WebSockets.
 
-## Environnements
+Volumes : deux bases, données Authentik partagées server/worker, métadonnées et objets Garage. Les messages Mailpit sont temporaires (tmpfs) et disparaissent à l’arrêt du conteneur. Les scripts ne suppriment aucun volume.
 
-### Local
-Docker Compose sur macOS. Les noms de domaine et le TLS local seront décidés à l'étape 2.
-
-### VM Énov
-Déploiement après obtention des accès, configuration du VPN NetBird, accès SSH et création de la VM selon la documentation publique du campus. L'URL et les comptes de démonstration seront ajoutés au README une fois validés.
-
-## Flux OIDC à documenter
-
-1. L'utilisateur ouvre Rallly.
-2. Rallly redirige vers Authentik pour l'authentification.
-3. Authentik authentifie l'utilisateur et applique les règles d'accès prévues.
-4. Authentik renvoie le résultat OIDC à l'URI de redirection configurée.
-5. Rallly établit la session applicative.
-
-Les URI, scopes, claims et variables doivent correspondre à la documentation des versions utilisées.
+L'accès HTTP est réservé au laboratoire local. Une VM exige TLS, DNS, pare-feu, SMTP réel, sauvegardes et accès Mailpit restreint.

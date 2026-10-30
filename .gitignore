@@ -31,3 +31,9 @@ coverage/
 dist/
 build/
 node_modules/
+
+# Sauvegardes privées
+backups/
+
+# Captures locales pouvant contenir des informations personnelles
+outputs/

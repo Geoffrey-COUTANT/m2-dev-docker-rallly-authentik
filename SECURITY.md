@@ -1,13 +1,20 @@
-# Sécurité — règles du dépôt
+# Sécurité du laboratoire
 
-- Ne jamais committer `.env`, mots de passe, jetons OAuth/OIDC, clés privées ou certificats privés.
-- `.env.example` ne contient que des valeurs factices et des noms de variables à confirmer.
-- Ne pas publier de ports de base de données sur l'hôte, sauf nécessité de diagnostic documentée et temporaire.
-- Ne pas exposer directement les interfaces d'administration.
-- Utiliser des volumes persistants pour les données nécessaires.
-- Réduire les privilèges et les ports exposés ; éviter le mode `privileged`.
-- Les images et versions seront épinglées après vérification de compatibilité.
-- Faire un scan d'image et commenter les résultats avant la soutenance.
-- En cas de fuite d'un secret : le révoquer/renouveler immédiatement, puis supprimer sa présence dans l'historique Git si nécessaire.
+`.env`, sauvegardes et secrets sont hors dépôt et hors ZIP. Le script génère des secrets aléatoires hexadécimaux, compatibles avec l'URL PostgreSQL, et refuse l'écrasement. Ne pas régénérer les secrets d'une installation existante.
 
-Les mesures ci-dessus sont des exigences de travail ; elles ne signifient pas que la stack est déjà durcie.
+Traefik et Mailpit utilisent un UID explicite non-root ; l'image officielle Rallly utilise `nextjs`. Les bases et Garage conservent leur initialisation upstream. Authentik utilise l'UID 1000 de son image sans `user: root` forcé ; les éventuels besoins de droits sur `/data` restent à vérifier lors du premier démarrage effectif. Pas de socket Docker, pas d'outpost automatique.
+
+Tous les services ont `no-new-privileges`. Les capabilities sont supprimées pour proxy, Mailpit et Rallly. Le système de fichiers Traefik est en lecture seule. Ne pas imposer aveuglément ces réglages aux services qui initialisent des volumes.
+
+Un seul port est publié sur 127.0.0.1. HTTP et Mailpit sont réservés au laboratoire local. Les groupes Authentik limitent le SSO mais ne bloquent pas tous les parcours Rallly. Un accès public exige une analyse de ces parcours, TLS, SMTP réel, sauvegardes et scan des images.
+
+## Scan à réaliser et commenter
+
+Avec Docker Scout installé :
+
+```bash
+docker scout cves lukevella/rallly:4.16.3
+docker scout cves ghcr.io/goauthentik/server:2026.8.5
+```
+
+Faire de même pour chaque dépendance ; consigner les CVE, correctifs, faux positifs justifiés et limites. Aucun scan CVE réussi n'est revendiqué sans rapport. Les images sont des dépendances tierces, et un tag précis n'est pas une garantie d'absence de faille.

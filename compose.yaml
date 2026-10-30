@@ -1,0 +1,145 @@
+name: ${COMPOSE_PROJECT_NAME:-m2-docker}
+x-security: &security
+  restart: unless-stopped
+  security_opt: [no-new-privileges=true]
+x-ak-env: &ak-env
+  AUTHENTIK_POSTGRESQL__HOST: authentik-db
+  AUTHENTIK_POSTGRESQL__NAME: authentik
+  AUTHENTIK_POSTGRESQL__USER: authentik
+  AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_DB_PASSWORD:?Générer .env}
+  AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?Générer .env}
+  AUTHENTIK_EMAIL__HOST: mailpit
+  AUTHENTIK_EMAIL__PORT: '1025'
+  AUTHENTIK_EMAIL__USE_TLS: 'false'
+  AUTHENTIK_EMAIL__USE_SSL: 'false'
+  AUTHENTIK_EMAIL__FROM: authentik@lab.example.com
+  AUTHENTIK_ERROR_REPORTING__ENABLED: 'false'
+services:
+  traefik:
+    <<: *security
+    image: traefik:v3.6.1
+    user: '65532:65532'
+    cap_drop: [ALL]
+    read_only: true
+    command:
+      - --entrypoints.web.address=:8080
+      - --providers.file.filename=/etc/traefik/dynamic.yaml
+      - --api.dashboard=false
+      - --accesslog=true
+    ports: ['127.0.0.1:8080:8080']
+    volumes: ['./docker/traefik/dynamic.yaml:/etc/traefik/dynamic.yaml:ro']
+    networks:
+      frontend:
+        aliases: [rallly.localhost, authentik.localhost, mailpit.localhost]
+  rallly:
+    <<: *security
+    image: lukevella/rallly:4.16.3
+    cap_drop: [ALL]
+    environment:
+      DATABASE_URL: postgres://rallly:${RALLLY_DB_PASSWORD:?Générer .env}@rallly-db:5432/rallly
+      SECRET_PASSWORD: ${SECRET_PASSWORD:?Générer .env}
+      NEXT_PUBLIC_BASE_URL: http://rallly.localhost:8080
+      SUPPORT_EMAIL: support@lab.example.com
+      NOREPLY_EMAIL: rallly@lab.example.com
+      SMTP_HOST: mailpit
+      SMTP_PORT: '1025'
+      SMTP_SECURE: 'false'
+      S3_ENDPOINT: http://garage:3900
+      S3_REGION: garage
+      S3_BUCKET_NAME: rallly
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?Générer .env}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?Générer .env}
+    depends_on:
+      rallly-db: {condition: service_healthy}
+      garage: {condition: service_healthy}
+      mailpit: {condition: service_started}
+    networks: [frontend, rallly-data]
+  rallly-db:
+    <<: *security
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: rallly
+      POSTGRES_USER: rallly
+      POSTGRES_PASSWORD: ${RALLLY_DB_PASSWORD:?Générer .env}
+    volumes: [rallly-db:/var/lib/postgresql/data]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U rallly -d rallly']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [rallly-data]
+  authentik-db:
+    <<: *security
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: authentik
+      POSTGRES_USER: authentik
+      POSTGRES_PASSWORD: ${AUTHENTIK_DB_PASSWORD:?Générer .env}
+    volumes: [authentik-db:/var/lib/postgresql/data]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U authentik -d authentik']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [authentik-data]
+  authentik-server:
+    <<: *security
+    image: ghcr.io/goauthentik/server:2026.8.5
+    command: server
+    shm_size: 512mb
+    environment: *ak-env
+    volumes: [authentik-data:/data]
+    depends_on:
+      authentik-db: {condition: service_healthy}
+    networks: [frontend, authentik-data]
+  authentik-worker:
+    <<: *security
+    image: ghcr.io/goauthentik/server:2026.8.5
+    command: worker
+    shm_size: 512mb
+    environment: *ak-env
+    volumes: [authentik-data:/data]
+    depends_on:
+      authentik-db: {condition: service_healthy}
+    networks: [frontend, authentik-data]
+  garage:
+    <<: *security
+    image: dxflrs/garage:v2.3.0
+    command: /garage server --single-node --default-bucket
+    environment:
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?Générer .env}
+      GARAGE_DEFAULT_ACCESS_KEY: ${S3_ACCESS_KEY_ID:?Générer .env}
+      GARAGE_DEFAULT_SECRET_KEY: ${S3_SECRET_ACCESS_KEY:?Générer .env}
+      GARAGE_DEFAULT_BUCKET: rallly
+    volumes:
+      - ./docker/rallly/garage.toml:/etc/garage.toml:ro
+      - garage-meta:/var/lib/garage/meta
+      - garage-data:/var/lib/garage/data
+    healthcheck:
+      test: ['CMD', '/garage', 'stats', '-a']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks: [rallly-data]
+  mailpit:
+    <<: *security
+    image: axllent/mailpit:v1.27.10
+    user: '65532:65532'
+    cap_drop: [ALL]
+    environment:
+      MP_DATABASE: /tmp/mailpit.db
+    tmpfs: [/tmp:mode=1777]
+    networks: [frontend]
+networks:
+  frontend:
+  rallly-data:
+    internal: true
+  authentik-data:
+    internal: true
+volumes:
+  rallly-db:
+  authentik-db:
+  authentik-data:
+  garage-meta:
+  garage-data:

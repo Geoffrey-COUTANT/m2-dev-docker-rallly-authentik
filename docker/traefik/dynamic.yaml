@@ -1,0 +1,24 @@
+http:
+  routers:
+    rallly:
+      rule: Host(`rallly.localhost`)
+      entryPoints: [web]
+      service: rallly
+    authentik:
+      rule: Host(`authentik.localhost`)
+      entryPoints: [web]
+      service: authentik
+    mailpit:
+      rule: Host(`mailpit.localhost`)
+      entryPoints: [web]
+      service: mailpit
+  services:
+    rallly:
+      loadBalancer:
+        servers: [{url: 'http://rallly:3000'}]
+    authentik:
+      loadBalancer:
+        servers: [{url: 'http://authentik-server:9000'}]
+    mailpit:
+      loadBalancer:
+        servers: [{url: 'http://mailpit:8025'}]
