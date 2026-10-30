@@ -1,6 +1,7 @@
 # Runbook local
 
-Ce document sera complété après l'ajout de `compose.yaml`.
+La procédure d'installation et les paramètres du `.env` sont décrits dans
+[le README](../README.md).
 
 ## Vérifications préalables
 
@@ -10,17 +11,20 @@ docker compose version
 docker info
 ```
 
-## Étape actuelle
+## Démarrage et diagnostic
 
-Le squelette ne lance pas encore de services. Ne lance pas `docker compose up` avant l'étape 2 : le fichier Compose n'a pas encore été créé.
+```bash
+docker compose config --quiet
+docker compose up -d --build
+docker compose ps
+docker compose logs -f authentik_server authentik_worker
+```
 
-## Quand la stack sera ajoutée
+Rallly est accessible sur <http://localhost:3000> et Authentik sur
+<http://authentik.localhost:9000>. Au premier accès, configurer le compte `akadmin`.
+Rallly utilise Authentik pour la connexion ; voir [la configuration OIDC](authentik-oidc.md).
 
-La procédure définitive précisera :
-- la création du `.env` ;
-- la validation de la configuration avec `docker compose config` ;
-- le démarrage ;
-- les URLs locales ;
-- les commandes de diagnostic ;
-- l'arrêt et la conservation des volumes ;
-- la réinitialisation des données de test.
+## Arrêt
+
+`docker compose down` arrête les services en conservant les volumes PostgreSQL
+et les fichiers Authentik. L'option `--volumes` supprime toutes ces données.

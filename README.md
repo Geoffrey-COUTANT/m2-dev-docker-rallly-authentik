@@ -1,104 +1,66 @@
-# Projet M2 — Dev avec Docker
+# Déploiement de Rallly avec Authentik
 
-> Année 2026–2027 · M2 DEVFULLSTACK · Groupe de 2  
-> Sujet de référence : « Sujet de projet — Dev avec Docker »
+La stack construit notre fork depuis le sous-module `rallly` et lance Authentik
+(serveur et worker) avec une base PostgreSQL dédiée. Les données sont conservées
+dans des volumes Docker. La configuration suit le
+[Compose officiel d’Authentik](https://docs.goauthentik.io/compose.yml).
 
-## Objectif
+Avec Docker et Docker Compose 2.24 ou supérieur :
 
-Construire un environnement reproductible, d'abord en local puis sur une VM Énov, autour de :
-
-- Docker Compose ;
-- un reverse proxy (choix provisoire : Traefik) ;
-- Authentik configuré comme fournisseur d'identité OIDC ;
-- Rallly self-hosted ;
-- une pipeline CI/CD ;
-- deux fonctionnalités du catalogue attribuées par le formateur et une fonctionnalité libre.
-
-**Priorité : stabiliser l'infrastructure avant de développer les fonctionnalités Rallly.** Les choix de versions et les variables exactes seront validés avant la création du Compose définitif.
-
-## État du dépôt
-
-Ce dépôt est le **squelette de départ**. Il ne contient pas encore la stack complète et ne doit pas être présenté comme déployé ou opérationnel.
-
-- [ ] Confirmer avec le formateur les deux fonctionnalités attribuées.
-- [ ] Vérifier les versions et documentations officielles de Rallly et Authentik.
-- [ ] Construire et tester la stack locale.
-- [ ] Démontrer le SSO OIDC, les policies par groupe et l'invitation externe.
-- [ ] Ajouter les fonctionnalités retenues.
-- [ ] Valider la CI sur la branche principale.
-- [ ] Déployer sur la VM Énov et documenter les écarts.
-- [ ] Préparer la soutenance.
-
-## Prérequis
-
-- macOS ;
-- Docker Desktop installé et démarré ;
-- Git ;
-- un compte GitHub ;
-- accès à la documentation et, plus tard, à la VM Énov.
-
-Vérifier les outils :
-
-```bash
-docker --version
-docker compose version
-git --version
-docker info
+```shell
+git submodule update --init --recursive
+# Uniquement si .env n'existe pas encore :
+cp .env.example .env
+chmod 600 .env
 ```
 
-`docker info` doit répondre sans erreur. Si Docker Desktop est fermé, lance-le avant de continuer.
+Renseigner les quatre secrets vides du `.env` avec les résultats de ces commandes
+(une commande par variable, conserver ces secrets après initialisation) :
 
-## Arborescence
-
-```text
-.
-├── .env.example
-├── .gitignore
-├── README.md
-├── SECURITY.md
-├── docker/
-│   ├── authentik/
-│   ├── rallly/
-│   └── traefik/
-├── docs/
-│   ├── architecture.md
-│   ├── decisions.md
-│   ├── plan-de-travail.md
-│   ├── runbook-local.md
-│   ├── runbook-enov.md
-│   ├── authentik-oidc.md
-│   ├── features.md
-│   └── soutenance.md
-├── scripts/
-└── .github/
-    └── workflows/
-        └── ci.yml
+```shell
+openssl rand -hex 32  # RALLLY_SECRET
+openssl rand -hex 32  # AUTHENTIK_DB_PASSWORD
+openssl rand -hex 60  # AUTHENTIK_SECRET_KEY
+openssl rand -hex 32  # OIDC_CLIENT_SECRET
 ```
 
-## Secrets et configuration
+Le `.env` local est déjà renseigné avec des secrets générés. Le mot de passe de la
+base Rallly reste `postgres` pour conserver la compatibilité avec un volume existant ;
+pour une nouvelle installation, le remplacer par une valeur hexadécimale.
+Modifier un mot de passe dans `.env` ne change pas celui d'une base déjà initialisée.
 
-1. Copier `.env.example` vers `.env` uniquement lorsque les variables nécessaires à la stack auront été confirmées.
-2. Remplacer tous les exemples par des valeurs locales fortes.
-3. Ne jamais committer `.env`, mots de passe, jetons, clés privées ou fichiers de certificats.
-4. Pour la VM, utiliser une configuration distincte et sécurisée ; ne pas recopier les secrets de production dans GitHub.
-5. Les secrets du workflow GitHub devront être ajoutés dans les paramètres du dépôt uniquement si un déploiement automatisé est retenu.
+```shell
+docker compose config --quiet
+docker compose up -d --build
+```
 
-Le fichier `.env.example` est un inventaire initial de paramètres envisagés, pas encore une configuration exécutable. Il sera ajusté à la version précise des images retenues.
+- Rallly : <http://localhost:3000>
+- Authentik : <http://authentik.localhost:9000>
 
-## Développement en équipe
+Au premier accès à Authentik, définir le mot de passe du compte `akadmin`.
+Son adresse mail initiale est définie par `AUTHENTIK_BOOTSTRAP_EMAIL` ; chaque
+utilisateur doit avoir une adresse mail renseignée pour se connecter à Rallly.
+Les ports, la version, le nom de base et l'utilisateur Authentik se règlent dans `.env`.
+Cette version utilise PostgreSQL sans Redis. Le worker n'a pas accès au socket Docker ;
+les éventuels outposts externes doivent être déployés manuellement.
 
-- Créer des branches courtes par tâche : `docs/...`, `infra/...`, `feature/...`.
-- Ouvrir une Pull Request pour les changements importants.
-- Faire relire les changements de l'autre membre.
-- Ne jamais partager les secrets dans les issues, commits ou captures d'écran.
-- Garder des commits réguliers et explicites.
+La connexion par mail de Rallly est désactivée (`EMAIL_LOGIN_ENABLED=false`).
+Rallly redirige automatiquement vers Authentik. Le blueprint monté dans le worker
+crée l'application OIDC `rallly`, son fournisseur et les scopes `openid profile email`.
+Le client ID et le secret sont partagés via `.env` ; aucune saisie manuelle de ces
+valeurs dans Authentik n'est nécessaire. Rallly attend que le fournisseur soit prêt.
 
-## Démarrage
+Le nom `authentik.localhost` pointe vers la boucle locale dans les navigateurs
+compatibles avec `.localhost`, et vers le serveur Authentik sur le réseau Docker.
+Si le navigateur ne le résout pas, ajouter `127.0.0.1 authentik.localhost` dans le
+fichier hosts de la machine. Utiliser cette adresse pour Authentik afin que l'émetteur
+OIDC reste identique dans le navigateur et dans Rallly.
 
-À cette première étape, on prépare le dépôt et sa documentation. **Il n'y a pas encore de `compose.yaml` fonctionnel** : il sera ajouté à l'étape 2, après vérification des images et de leurs configurations officielles.
+Voir [la configuration et la vérification OIDC](docs/authentik-oidc.md).
+Les paramètres SMTP facultatifs de Rallly peuvent rester dans `rallly/apps/web/.env`.
 
-Voir :
-- [Architecture](docs/architecture.md)
-- [Plan de travail](docs/plan-de-travail.md)
-- [Décisions techniques](docs/decisions.md)
-- [Sécurité](SECURITY.md)
+```shell
+docker compose ps
+docker compose logs -f authentik_server authentik_worker
+docker compose down  # conserve les données
+```

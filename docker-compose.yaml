@@ -1,0 +1,128 @@
+x-authentik-environment: &authentik-environment
+  AUTHENTIK_POSTGRESQL__HOST: authentik_db
+  AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_DB_NAME:-authentik}
+  AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_DB_USER:-authentik}
+  AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_DB_PASSWORD:?Définir AUTHENTIK_DB_PASSWORD dans .env}
+  AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?Définir AUTHENTIK_SECRET_KEY dans .env}
+
+services:
+  rallly_db:
+    image: postgres:18-alpine
+    restart: always
+    ports:
+      - "5450:5432"
+    volumes:
+      - db-data:/var/lib/postgresql
+    environment:
+      - POSTGRES_PASSWORD=${RALLLY_DATABASE_PASSWORD:-postgres}
+      - POSTGRES_DB=rallly
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  rallly_selfhosted:
+    build:
+      args:
+        - SELF_HOSTED=true
+      context: ./rallly
+      dockerfile: ./apps/web/Dockerfile
+    restart: always
+    depends_on:
+      rallly_db:
+        condition: service_healthy
+      authentik_server:
+        condition: service_healthy
+    ports:
+      - 3000:3000
+    environment:
+      - DATABASE_URL=postgres://postgres:${RALLLY_DATABASE_PASSWORD:-postgres}@rallly_db/rallly
+      - SECRET_PASSWORD=${RALLLY_SECRET:?Définir RALLLY_SECRET dans .env}
+      - NEXT_PUBLIC_BASE_URL=${RALLLY_BASE_URL:-http://localhost:3000}
+      - SUPPORT_EMAIL=${RALLLY_SUPPORT_EMAIL:-support@example.com}
+      - EMAIL_LOGIN_ENABLED=${EMAIL_LOGIN_ENABLED:-false}
+      - REGISTRATION_ENABLED=true
+      - OIDC_NAME=${OIDC_NAME:-Authentik}
+      - OIDC_DISCOVERY_URL=http://${AUTHENTIK_HOST:-authentik.localhost}:${AUTHENTIK_HTTP_PORT:-9000}/application/o/rallly/.well-known/openid-configuration
+      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-rallly}
+      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:?Définir OIDC_CLIENT_SECRET dans .env}
+    env_file:
+      - path: rallly/apps/web/.env
+        required: false
+
+  authentik_db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${AUTHENTIK_DB_NAME:-authentik}
+      POSTGRES_USER: ${AUTHENTIK_DB_USER:-authentik}
+      POSTGRES_PASSWORD: ${AUTHENTIK_DB_PASSWORD:?Définir AUTHENTIK_DB_PASSWORD dans .env}
+    volumes:
+      - authentik-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d \"$$POSTGRES_DB\" -U \"$$POSTGRES_USER\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  authentik_server:
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG:-2026.8.5}
+    command: server
+    restart: unless-stopped
+    shm_size: 512mb
+    depends_on:
+      authentik_db:
+        condition: service_healthy
+    environment:
+      <<: *authentik-environment
+      AUTHENTIK_LISTEN__HTTP: 0.0.0.0:${AUTHENTIK_HTTP_PORT:-9000}
+    ports:
+      - "${AUTHENTIK_HTTP_PORT:-9000}:${AUTHENTIK_HTTP_PORT:-9000}"
+      - "${AUTHENTIK_HTTPS_PORT:-9443}:9443"
+    networks:
+      default:
+        aliases:
+          - ${AUTHENTIK_HOST:-authentik.localhost}
+    healthcheck:
+      # Attendre également que le worker ait créé l'application OIDC Rallly.
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:${AUTHENTIK_HTTP_PORT:-9000}/application/o/rallly/.well-known/openid-configuration', timeout=5).read()"
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 120s
+    volumes:
+      - authentik-data:/data
+      - ./docker/authentik/blueprints:/blueprints/custom:ro
+
+  authentik_worker:
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG:-2026.8.5}
+    command: worker
+    restart: unless-stopped
+    shm_size: 512mb
+    user: root
+    depends_on:
+      authentik_db:
+        condition: service_healthy
+    environment:
+      <<: *authentik-environment
+      AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-admin@example.com}
+      RALLLY_BASE_URL: ${RALLLY_BASE_URL:-http://localhost:3000}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-rallly}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?Définir OIDC_CLIENT_SECRET dans .env}
+    volumes:
+      - authentik-data:/data
+      - authentik-certs:/certs
+      - ./docker/authentik/blueprints:/blueprints/custom:ro
+
+volumes:
+  db-data:
+    driver: local
+  authentik-db-data:
+  authentik-data:
+  authentik-certs:

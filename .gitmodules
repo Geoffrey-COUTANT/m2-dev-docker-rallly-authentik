@@ -1,0 +1,3 @@
+[submodule "rallly"]
+	path = rallly
+	url = https://github.com/Geoffrey-COUTANT/rallly
